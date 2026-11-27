@@ -24,11 +24,11 @@ button:focus-visible{outline:3px solid var(--fg);outline-offset:2px}
 <body>
 <div id="ui"><div id="card">
 <h1>Paw Peak</h1>
-<p>A climbing course in the sky. Grab the rock, pull yourself up, and reach the golden trophy.</p>
+<p>A climbing course in the sky. Swing and push your way up the steps to the golden trophy.</p>
 <ul>
-<li>Squeeze grip near a block to grab it, then pull</li>
-<li>Let go while moving to launch yourself</li>
-<li>Left stick walks, right stick turns, A or X jumps</li>
+<li>Push off blocks with your hands to move, like Gorilla Tag</li>
+<li>Swing your arms down hard to launch yourself upward</li>
+<li>Right stick turns</li>
 <li>Collect all 12 coins on the way up</li>
 </ul>
 <button id="enter" disabled>Checking VR…</button>
@@ -64,14 +64,13 @@ function box(x,top,z,w,h,d,c){
 box(0,0,0,6,1,6,0x7a5c3e);
 const steps=[];
 const cols=[0xd9643a,0xe3a13b,0x4fa3a5,0x8a6fc7,0x58a84f];
-for(let i=0;i<10;i++){
-  const x=Math.sin(i*.6)*4,y=.9+i,z=-5-i*2.6;
-  box(x,y,z,2.2,.4,2.2,cols[i%5]);
+for(let i=0;i<18;i++){
+  const x=Math.sin(i*.5)*4,y=.9+i,z=-5-i*2.6;
+  box(x,y,z,2.4,.4,2.4,cols[i%5]);
   steps.push({x,y,z});
 }
-const L=steps[9];
-box(L.x,18,L.z-3,3,18,3,0x9a8f84);
-box(L.x,18.4,L.z-3,4.4,.4,4.4,0xd9643a);
+const L=steps[17];
+box(L.x,18.9,L.z-3.5,5,.4,5,0xd9643a);
 
 // animals
 function animal(c,x,y,z,ry){
@@ -95,11 +94,11 @@ function coin(x,y,z){
   const g=new THREE.Group();g.add(m);g.position.set(x,y,z);scene.add(g);coins.push(g);
 }
 for(let i=1;i<10;i++)coin(steps[i].x,steps[i].y+.9,steps[i].z);
-[12,14.5,17].forEach(h=>coin(L.x,h,L.z-1.1));
+[11,14,17].forEach(i=>coin(steps[i].x,steps[i].y+.9,steps[i].z));
 const trophy=new THREE.Group();
 const cup=new THREE.Mesh(new THREE.CylinderGeometry(.35,.15,.5,16),M(0xffc400));cup.position.y=.5;
 const stem=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.3,8),M(0xffc400));stem.position.y=.15;
-trophy.add(cup,stem);trophy.position.set(L.x,18.6,L.z-3);scene.add(trophy);
+trophy.add(cup,stem);trophy.position.set(L.x,19.1,L.z-3.5);scene.add(trophy);
 
 // scoreboard
 const cv=document.createElement('canvas');cv.width=512;cv.height=256;
@@ -151,44 +150,34 @@ renderer.setAnimationLoop(()=>{
     renderer.render(scene,camera);return;
   }
   camera.position.set(0,0,0);
-  // grabbing
-  const pull=new V();let n=0;
+  // snap turn
+  turnCool-=dt;
   hands.forEach(h=>{
-    const u=h.userData,gp=u.gp;
-    const sq=!!(gp&&gp.buttons[1]&&gp.buttons[1].pressed);
+    const gp=h.userData.gp;if(!gp||h.userData.hand!=='right')return;
+    const ax=gp.axes[2]||0;
+    if(Math.abs(ax)>.7&&turnCool<=0){
+      turnCool=.3;camera.getWorldPosition(head);
+      rig.rotation.y-=Math.sign(ax)*Math.PI/6;rig.updateMatrixWorld(true);
+      camera.getWorldPosition(wp);rig.position.add(head.sub(wp));
+    }
+  });
+  // gorilla-tag style hand push
+  const push=new V();let n=0;
+  hands.forEach(h=>{
+    const u=h.userData;
     h.getWorldPosition(wp);
-    if(sq&&!u.on&&touching(wp)){u.on=true;u.a.copy(wp)}
-    if(!sq)u.on=false;
-    if(u.on){pull.add(u.a.clone().sub(wp));n++}
+    const loc=h.position.clone();
+    if(u.p&&touching(wp)){push.sub(loc.clone().sub(u.p).applyQuaternion(rig.quaternion));n++}
+    u.p=loc;
   });
   if(n>0){
-    pull.multiplyScalar(1/n);
-    rig.position.add(pull);
-    climbVel.lerp(pull.clone().multiplyScalar(1/Math.max(dt,.001)),.4);
+    if(push.length()>.5)push.setLength(.5);
+    rig.position.add(push);
+    climbVel.lerp(push.clone().multiplyScalar(1/Math.max(dt,.001)),.5);
     vel.set(0,0,0);wasGrab=true;
   }else{
-    if(wasGrab){vel.copy(climbVel).multiplyScalar(1.15);if(vel.length()>9)vel.setLength(9);wasGrab=false;climbVel.set(0,0,0)}
-    // sticks
-    hands.forEach(h=>{
-      const u=h.userData,gp=u.gp;if(!gp)return;
-      const ax=gp.axes[2]||0,ay=gp.axes[3]||0;
-      if(u.hand==='left'&&(Math.abs(ax)>.15||Math.abs(ay)>.15)){
-        camera.getWorldDirection(fwd);fwd.y=0;fwd.normalize();
-        right.set(-fwd.z,0,fwd.x).multiplyScalar(-1);
-        rig.position.addScaledVector(fwd,-ay*2.8*dt).addScaledVector(right,-ax*2.8*dt);
-      }
-      if(u.hand==='right'){
-        turnCool-=dt;
-        if(Math.abs(ax)>.7&&turnCool<=0){
-          turnCool=.3;
-          camera.getWorldPosition(head);
-          rig.rotation.y-=Math.sign(ax)*Math.PI/6;rig.updateMatrixWorld(true);
-          camera.getWorldPosition(wp);rig.position.add(head.sub(wp));
-        }
-        if(grounded&&gp.buttons[4]&&gp.buttons[4].pressed){vel.y=5.5;grounded=false}
-      }
-    });
-    vel.y-=12*dt;
+    if(wasGrab){vel.copy(climbVel).multiplyScalar(1.1);if(vel.length()>10)vel.setLength(10);wasGrab=false;climbVel.set(0,0,0)}
+    vel.y-=10*dt;
     const py=rig.position.y;
     rig.position.addScaledVector(vel,dt);
     grounded=false;
